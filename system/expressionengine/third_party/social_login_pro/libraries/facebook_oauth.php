@@ -90,61 +90,45 @@ class facebook_oauth
      */
     public function get_access_token($callback = false, $secret = false)
     {
-  
-        if($secret !== false)$tokenddata['oauth_token_secret'] = urlencode($secret);
-
+	// Set baseurl
         $baseurl = "https://graph.facebook.com/oauth/access_token?client_id=".$this->_consumer['key']."&redirect_uri=".urlencode($callback)."&client_secret=".$this->_consumer['secret']."&code=$secret";
 
+        // Get our first response and decode it into an array
         $response = $this->_connect($baseurl, '');
+        $response = json_decode($response, true);
 
-        //Parse the response into an array it should contain
-        //both the access token and the secret key. (You only
-        //need the secret key if you use HMAC-SHA1 signatures.)
-        if (strpos($response, 'error')!==false)
-        {
-            if (function_exists('json_decode'))
-            {
-                $a = json_decode($response);
-            }
-            else
-            {
-                require_once(PATH_THIRD.'social_login_pro/libraries/inc/JSON.php');
-                $json = new Services_JSON();
-                $a = $json->decode($response);
-            }
-            $oauth['oauth_problem'] = $a->error->message;
-        } 
-        else
-        {                            
-            parse_str($response, $oauth);        
-        }   
-        
-        //let's do a check!
-        $baseurl = "https://graph.facebook.com/app/?access_token=".$oauth['access_token'];
+        // set our access token
+        $access_token = $response['access_token'];
 
+        // Check if an error is set, if so return it
+        if(isset($response['error'])) {
+            return $response['error'];
+        }
+
+        // Reset baseurl
+        $baseurl = "https://graph.facebook.com/app/?access_token=".$access_token;
+
+        // Get our second response and decode it
+        // returns Array(category, link, name, id)
         $response = $this->_connect($baseurl, '');
-        
-        if (function_exists('json_decode'))
+        $response = json_decode($response, true);
+
+        // Set access_token key in new response
+        $response['access_token']   = $access_token;
+	
+   	// verify that our response id is the same as the consumer key 
+        if ($response['id'] != $this->_consumer['key'])
         {
-            $check = json_decode($response);
+            $response['oauth_problem'] = 'Could not verify your login data.';
         }
-        else
-        {
-            require_once(PATH_THIRD.'social_login_pro/libraries/inc/JSON.php');
-            $json = new Services_JSON();
-            $check = $json->decode($response);
-        }  
-        
-        //var_dump($check);
-        
-        if ($check->id!=$this->_consumer['key'])
-        {
-            $oauth['oauth_problem'] = 'Could not verify your login data.';
+	
+	// if secret is set, urlencode it    
+        if($secret !== false){
+            $response['oauth_token_secret'] = urlencode($secret);
         }
-        
 
         //Return the token and secret for storage
-        return $oauth;
+        return $response;
     }
     
     /**
